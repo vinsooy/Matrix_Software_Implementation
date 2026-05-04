@@ -1,0 +1,194 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run tests
+      run: npm test
+
+    - name: Run security audit
+      run: npm audit --audit-level moderate
+
+  staging-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    environment: staging
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Vercel CLI
+      run: npm install -g vercel
+
+    - name: Deploy to Vercel (Staging)
+      run: vercel --prod false --yes
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    - name: Staging smoke test
+      run: |
+        sleep 20
+        STAGING_URL=$(vercel ls --json | jq -r '.[0].url')
+        echo "Testing staging deployment at: $STAGING_URL"
+
+        # Test health endpoint
+        if curl -f -s "$STAGING_URL/health" > /dev/null; then
+          echo "✓ Staging health check passed"
+        else
+          echo "✗ Staging health check failed"
+          exit 1
+        fi
+
+        echo "Staging deployment successful!"
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build (if needed)
+      run: npm run build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Vercel CLI
+      run: npm install -g vercel
+
+    - name: Deploy to Vercel (Production)
+      run: vercel --prod --yes
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  smoke-test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+    - name: Install Vercel CLI
+      run: npm install -g vercel
+
+    - name: Wait for deployment and get URL
+      run: |
+        sleep 30
+        DEPLOY_URL=$(vercel ls --prod --json | jq -r '.[0].url')
+        echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_ENV
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    - name: Production smoke test
+      run: |
+        echo "Testing production deployment at: $DEPLOY_URL"
+
+        # Test health endpoint
+        HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL/health")
+        if [ "$HEALTH_STATUS" -eq 200 ]; then
+          echo "✓ Production health check passed (HTTP $HEALTH_STATUS)"
+        else
+          echo "✗ Production health check failed (HTTP $HEALTH_STATUS)"
+          exit 1
+        fi
+
+        # Test API endpoint
+        API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL/")
+        if [ "$API_STATUS" -eq 200 ]; then
+          echo "✓ Production API endpoint returns 200"
+        else
+          echo "✗ Production API endpoint failed (HTTP $API_STATUS)"
+          exit 1
+        fi
+
+        # Test protected endpoint (should fail without auth)
+        AUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL/add" \
+          -H "Content-Type: application/json" \
+          -d '{"a": [[1, 2]], "b": [[3, 4]]}')
+        if [ "$AUTH_STATUS" -eq 401 ]; then
+          echo "✓ Authentication properly blocks unauthorized access"
+        else
+          echo "✗ Authentication check failed (HTTP $AUTH_STATUS)"
+          exit 1
+        fi
+
+        echo "All production smoke tests passed!"
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

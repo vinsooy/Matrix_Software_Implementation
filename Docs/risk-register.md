@@ -1,4 +1,4 @@
-# Risk Register – TaskFlow App
+# Risk Register – Matrix Software Implementation
 
 ## Risk Scoring Formula
 **Risk Score = Likelihood × Impact**
@@ -16,38 +16,53 @@
 
 ## Identified Risks
 
-### Risk 1 – Authentication Security Vulnerability
-- **Description:** User login and registration may be vulnerable to attacks such as SQL injection or brute force.
-- **Likelihood:** 3
-- **Impact:** 5
-- **Risk Score:** 15 (High)
-- **Mitigation:** Implement input validation, password hashing (bcrypt), and rate limiting on login attempts.
-- **Owner:** Dax Oliver Romualdez (Backend Developer)
-
----
-
-### Risk 2 – Deployment Failure on Vercel
-- **Description:** Misconfigured CI/CD pipeline or environment variables may cause deployment to fail.
+### Risk 1 – Unauthorized API Access
+- **Description:** Attackers could access matrix calculation endpoints without proper authentication, potentially leading to resource abuse or data exposure.
 - **Likelihood:** 3
 - **Impact:** 4
 - **Risk Score:** 12 (High)
-- **Mitigation:** Test deployments in a staging environment before production; maintain deployment checklist.
-- **Owner:** Joshua Ganas (DevOps Engineer)
+- **Mitigation:** Implemented Bearer token authentication on all sensitive endpoints; input validation prevents malformed requests; rate limiting could be added in future.
+- **Owner:** Security Team
 
 ---
 
-### Risk 3 – Scope Creep
-- **Description:** New features may be added mid-sprint without proper planning, delaying delivery.
-- **Likelihood:** 4
+### Risk 2 – Input Validation Bypass
+- **Description:** Malformed or malicious input could bypass validation and cause application crashes or unexpected behavior.
+- **Likelihood:** 2
+- **Impact:** 4
+- **Risk Score:** 8 (Medium)
+- **Mitigation:** Comprehensive input validation middleware checks matrix structure, data types, and size limits; all inputs sanitized before processing.
+- **Owner:** Development Team
+
+---
+
+### Risk 3 – Sensitive Data Exposure
+- **Description:** Authentication tokens or other sensitive configuration could be exposed through logs, error messages, or misconfigured environment variables.
+- **Likelihood:** 2
+- **Impact:** 5
+- **Risk Score:** 10 (High)
+- **Mitigation:** Environment variables used for secrets with .env files excluded from version control; generic error messages prevent information disclosure; tokens validated server-side only.
+- **Owner:** DevOps Team
+
+---
+
+### Risk 4 – Dependency Vulnerabilities
+- **Description:** Third-party packages may contain security vulnerabilities that could compromise the application.
+- **Likelihood:** 3
 - **Impact:** 3
-- **Risk Score:** 12 (High)
-- **Mitigation:** Enforce strict backlog management; all new features must go through backlog refinement before being added to a sprint.
-- **Owner:** Vince Rommel Manriquez (Project Manager)
+- **Risk Score:** 9 (Medium)
+- **Mitigation:** Regular dependency audits with `npm audit`; dependencies kept up-to-date; minimal package set used; security scanning in CI/CD pipeline.
+- **Owner:** Security Team
 
 ---
 
-### Risk 4 – Team Member Unavailability
-- **Description:** A team member may become unavailable due to illness or personal emergencies, slowing progress.
+### Risk 5 – Denial of Service via Large Inputs
+- **Description:** Large matrix inputs could consume excessive server resources, leading to DoS conditions.
+- **Likelihood:** 2
+- **Impact:** 3
+- **Risk Score:** 6 (Medium)
+- **Mitigation:** Request size limits (10MB) implemented; input validation prevents extremely large matrices; stateless design limits resource consumption.
+- **Owner:** Development Team
 - **Likelihood:** 3
 - **Impact:** 3
 - **Risk Score:** 9 (Medium)
